@@ -76,9 +76,9 @@ streamlit run app.py
 
 `filler.py`의 `OUTPUT_DIR`은 Windows에서는 프로젝트의 `output/`, 그 외 OS에서는 `tempfile.gettempdir()`(일반적으로 `/tmp` 계열)을 사용합니다. 클라우드에서는 세션 종료 후 파일이 남지 않는 것이 정상입니다.
 
-**4. 시스템 패키지 (LibreOffice)**
+**4. 시스템 패키지 (LibreOffice + 한글 PDF 글꼴)**
 
-저장소 루트에 `packages.txt`가 있으며, 한 줄에 `libreoffice`를 적어 두었습니다. Streamlit Community Cloud가 배포 시 `apt`로 설치해 `libreoffice` 명령을 씁니다.
+저장소 루트의 `packages.txt`에 `libreoffice`, `fonts-noto-cjk`, `fonts-nanum`이 있습니다. Streamlit Community Cloud가 배포 시 `apt`로 설치합니다. 서버에 한글 글꼴이 없으면 LibreOffice로 만든 합본 PDF에서 글자가 □로 깨지므로, 위 글꼴 패키지와 `filler.py`의 Linux 저장 시 글꼴 통일(`Noto Sans CJK KR`)이 함께 필요합니다.
 
 **5. GitHub에 코드 올리기**
 
@@ -155,7 +155,7 @@ D:\j\soon\docx\
 ├── soon-493508-da5109c2381f.json  # 구글 서비스 계정 키 (비공개)
 ├── 영양사정기록지_개정.docx   # 원본 템플릿
 ├── requirements.txt
-├── packages.txt              # Streamlit Cloud: apt 패키지 (LibreOffice)
+├── packages.txt              # Streamlit Cloud: LibreOffice + 한글 글꼴 apt 패키지
 ├── output/                   # 생성된 파일 저장 (Windows 로컬 전용)
 ├── README.md                 # 초기 설정 가이드
 └── DEPLOY.md                 # 이 파일
