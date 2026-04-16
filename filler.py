@@ -353,67 +353,8 @@ def fill_document(data: dict) -> Document:
 # 저장 / 출력
 # ─────────────────────────────────────────
 
-# Linux + LibreOffice headless PDF: 템플릿이 맑은 고딕 등 Windows 글꼴만 가리키면
-# 서버에 CJK 글꼴이 없을 때 PDF가 □로 나온다. packages.txt에 fonts-noto-cjk 등을
-# 설치하고, 저장 직전에 run 단위로 eastAsia 글꼴을 맞춘다.
-_LINUX_PDF_BODY_FONT = 'Noto Sans CJK KR'
-
-
-def _iter_runs_in_cell(cell):
-    for p in cell.paragraphs:
-        yield from p.runs
-    for t in cell.tables:
-        yield from _iter_runs_in_table(t)
-
-
-def _iter_runs_in_table(table):
-    for row in table.rows:
-        for cell in row.cells:
-            yield from _iter_runs_in_cell(cell)
-
-
-def _iter_runs_in_story(story):
-    """본문(doc) / 머리말·꼬리말 등 블록 컨테이너"""
-    for p in story.paragraphs:
-        yield from p.runs
-    for t in story.tables:
-        yield from _iter_runs_in_table(t)
-
-
-def _apply_run_font_for_linux_pdf(run, font_name: str):
-    from docx.oxml import OxmlElement
-    from docx.oxml.ns import qn
-
-    run.font.name = font_name
-    r = run._element
-    rPr = r.rPr
-    if rPr is None:
-        rPr = OxmlElement('w:rPr')
-        r.insert(0, rPr)
-    old = rPr.find(qn('w:rFonts'))
-    if old is not None:
-        rPr.remove(old)
-    rFonts = OxmlElement('w:rFonts')
-    rFonts.set(qn('w:ascii'), font_name)
-    rFonts.set(qn('w:hAnsi'), font_name)
-    rFonts.set(qn('w:cs'), font_name)
-    rFonts.set(qn('w:eastAsia'), font_name)
-    rPr.insert(0, rFonts)
-
-
-def _ensure_linux_pdf_fonts(doc: Document):
-    for run in _iter_runs_in_story(doc):
-        _apply_run_font_for_linux_pdf(run, _LINUX_PDF_BODY_FONT)
-    for section in doc.sections:
-        for story in (section.header, section.footer):
-            for run in _iter_runs_in_story(story):
-                _apply_run_font_for_linux_pdf(run, _LINUX_PDF_BODY_FONT)
-
-
 def save_document(doc: Document, name: str) -> str:
     """output/ 폴더에 저장 후 경로 반환"""
-    if platform.system() != 'Windows':
-        _ensure_linux_pdf_fonts(doc)
     # 파일 이름에 사용 불가 문자 제거
     safe_name = re.sub(r'[\\/:*?"<>|]', '_', name)
     path = os.path.join(OUTPUT_DIR, f'{safe_name}.docx')
