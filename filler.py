@@ -443,11 +443,11 @@ def _set_cell_preferred_width_dxa(cell, twips: int):
 
 
 def _twips_for_label_cell(text: str) -> int:
-    """라벨 글자 수에 따른 최소 너비(twips). 템플릿 기본(~1400)보다 넉넉히."""
+    """라벨 글자 수에 따른 목표 너비(twips). LibreOffice 첫 열용—과하면 값 칸이 좁아진다."""
     t = (text or '').strip()
     n = max(2, len(t))
-    # 한글·숫자 혼합 라벨: 글자당 약 320 twips + 여백 (12pt 기준 가늠)
-    return min(5200, max(2800, 320 * n + 400))
+    # 이전(2800~·320/글자) 대비 약 절반: 짧은 라벨은 최소만, 긴 라벨만 비례 확대
+    return min(2400, max(1380, 155 * n + 380))
 
 
 def _widen_first_column_labels_for_lo_pdf(doc: Document):
@@ -506,8 +506,8 @@ def _rebalance_tbl_grid_first_col_for_lo_pdf(doc: Document):
         w = c.get(qn('w:w'))
         widths.append(int(w) if w and str(w).isdigit() else 0)
 
-    # 첫 열 라벨(그리드 1칸만 쓰는 행) 중 필요한 최대 폭
-    target0 = 2800
+    # 첫 열 라벨(그리드 1칸만 쓰는 행) 중 필요한 최대 폭 (_twips_for_label_cell과 동일 하한)
+    target0 = 1380
     table = doc.tables[0]
     for row in table.rows:
         cells = _unique_cells(row)
@@ -527,8 +527,8 @@ def _rebalance_tbl_grid_first_col_for_lo_pdf(doc: Document):
         target0 = max(target0, _twips_for_label_cell(compact))
 
     old0 = widths[0]
-    # 다른 열에서 각각 최소 이 정도는 남긴다 (이름·날짜 값 칸 붕괴 방지)
-    min_floor = 500
+    # 다른 열에서 각각 최소 이 정도는 남긴다 (생년월일·등급 값 칸이 세로로 가는 것 방지)
+    min_floor = 620
     max_stealable = sum(max(0, w - min_floor) for w in widths[1:])
     want = target0 - old0
     if want <= 0:
