@@ -481,11 +481,88 @@ def _widen_first_column_labels_for_lo_pdf(doc: Document):
         _set_cell_preferred_width_dxa(cell0, w)
 
 
+def _rebalance_tbl_grid_first_col_for_lo_pdf(doc: Document):
+    """
+    LibreOffice는 w:tblGrid의 첫 w:gridCol(템플릿 약 461 twips)을 엄격히 적용해
+    첫 라벨이 글자 단위로 세로 배치된다. Word 로컬에서는 덜 드러날 수 있음.
+
+    첫 gridCol 목표 폭을 라벨 길이에 맞추고, 다른 열에서는 **최소 폭을 지키며**
+    줄일 수 있는 만큼만 빼서 총폭을 유지한다.
+    """
+    from docx.oxml.ns import qn
+
+    if not doc.tables:
+        return
+    tbl = doc.tables[0]._tbl
+    grid = tbl.find(qn('w:tblGrid'))
+    if grid is None:
+        return
+    cols = grid.findall(qn('w:gridCol'))
+    if len(cols) < 2:
+        return
+
+    widths = []
+    for c in cols:
+        w = c.get(qn('w:w'))
+        widths.append(int(w) if w and str(w).isdigit() else 0)
+
+    # 첫 열 라벨(그리드 1칸만 쓰는 행) 중 필요한 최대 폭
+    target0 = 2800
+    table = doc.tables[0]
+    for row in table.rows:
+        cells = _unique_cells(row)
+        if len(cells) < 2 or len(cells) not in (2, 3, 4, 8):
+            continue
+        tc0 = cells[0]._tc
+        tcPr = tc0.tcPr
+        if tcPr is None:
+            continue
+        gs = tcPr.find(qn('w:gridSpan'))
+        if gs is not None and gs.get(qn('w:val')) != '1':
+            continue
+        raw = _cell_plain_text(cells[0])
+        if not raw.strip():
+            continue
+        compact = _compact_label_text_for_libreoffice(raw)
+        target0 = max(target0, _twips_for_label_cell(compact))
+
+    old0 = widths[0]
+    # 다른 열에서 각각 최소 이 정도는 남긴다 (이름·날짜 값 칸 붕괴 방지)
+    min_floor = 500
+    max_stealable = sum(max(0, w - min_floor) for w in widths[1:])
+    want = target0 - old0
+    if want <= 0:
+        return
+    delta = min(want, max_stealable)
+    if delta <= 0:
+        return
+    target0 = old0 + delta
+    remaining = delta
+    order = sorted(range(1, len(widths)), key=lambda i: widths[i], reverse=True)
+    while remaining > 0:
+        progressed = False
+        for i in order:
+            if remaining <= 0:
+                break
+            take = min(remaining, max(0, widths[i] - min_floor))
+            if take > 0:
+                widths[i] -= take
+                remaining -= take
+                progressed = True
+        if not progressed:
+            break
+    widths[0] = old0 + (delta - remaining)
+
+    for c, w in zip(cols, widths):
+        c.set(qn('w:w'), str(int(max(100, w))))
+
+
 def save_document(doc: Document, name: str) -> str:
     """output/ 폴더에 저장 후 경로 반환"""
     if platform.system() != 'Windows':
         _normalize_lo_label_cells_for_pdf(doc)
         _widen_first_column_labels_for_lo_pdf(doc)
+        _rebalance_tbl_grid_first_col_for_lo_pdf(doc)
     # 파일 이름에 사용 불가 문자 제거
     safe_name = re.sub(r'[\\/:*?"<>|]', '_', name)
     path = os.path.join(OUTPUT_DIR, f'{safe_name}.docx')
