@@ -353,8 +353,72 @@ def fill_document(data: dict) -> Document:
 # 저장 / 출력
 # ─────────────────────────────────────────
 
+# LibreOffice PDF: 템플릿 라벨에 '성     명', '작 성 일'처럼 넓은 공백이 있으면
+# 좁은 셀에서 글자마다 줄바꿈(세로처럼 보임)이 난다. 라벨 열만 공백을 정리한다.
+_LO_HANGUL_ADJ_SPACE = re.compile(r'([\uac00-\ud7a3])\s([\uac00-\ud7a3])')
+
+
+def _compact_label_text_for_libreoffice(s: str) -> str:
+    if not s:
+        return s
+    # 자간용 다중 공백 제거
+    t = re.sub(r'\s{2,}', '', s)
+    # '작 성 일' → '작성일' (짧은 한글 라벨만, □·숫자·: 등이 있으면 건너뜀)
+    stripped = t.strip()
+    if len(stripped) > 14:
+        return t
+    if not re.fullmatch(r'[\uac00-\ud7a3\s]+', stripped):
+        return t
+    while True:
+        u = _LO_HANGUL_ADJ_SPACE.sub(r'\1\2', t)
+        if u == t:
+            break
+        t = u
+    return t
+
+
+def _rewrite_paragraph_text(para, new_text: str):
+    if not para.runs:
+        para.add_run(new_text)
+        return
+    para.runs[0].text = new_text
+    for r in para.runs[1:]:
+        r.text = ''
+
+
+def _normalize_lo_label_cells_for_pdf(doc: Document):
+    """첫 번째 표의 라벨 열만 LibreOffice 줄바꿈 완화용 텍스트 정리."""
+    if not doc.tables:
+        return
+    table = doc.tables[0]
+    for row in table.rows:
+        cells = _unique_cells(row)
+        n = len(cells)
+        if n == 8:
+            label_ix = (0, 2, 4, 6)
+        elif n == 4:
+            label_ix = (0, 2)
+        elif n == 2:
+            label_ix = (0,)
+        elif n == 3:
+            label_ix = (0, 1)
+        else:
+            continue
+        for i in label_ix:
+            if i >= n:
+                continue
+            cell = cells[i]
+            for para in cell.paragraphs:
+                full = ''.join(run.text or '' for run in para.runs)
+                new = _compact_label_text_for_libreoffice(full)
+                if new != full:
+                    _rewrite_paragraph_text(para, new)
+
+
 def save_document(doc: Document, name: str) -> str:
     """output/ 폴더에 저장 후 경로 반환"""
+    if platform.system() != 'Windows':
+        _normalize_lo_label_cells_for_pdf(doc)
     # 파일 이름에 사용 불가 문자 제거
     safe_name = re.sub(r'[\\/:*?"<>|]', '_', name)
     path = os.path.join(OUTPUT_DIR, f'{safe_name}.docx')
